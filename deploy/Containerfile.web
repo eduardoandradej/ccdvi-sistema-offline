@@ -1,0 +1,14 @@
+# Frontend estático + proxy reverso Nginx. Construir a partir da raiz do repositório:
+#   podman build -f deploy/Containerfile.web -t localhost/dvi-web:0.1.0 .
+FROM docker.io/library/node:22-bookworm-slim AS build
+WORKDIR /src
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend/ ./
+RUN npx tsc -b && npx vite build
+
+FROM docker.io/library/nginx:1.27-alpine
+COPY deploy/config/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /src/dist /usr/share/nginx/html
+EXPOSE 8080

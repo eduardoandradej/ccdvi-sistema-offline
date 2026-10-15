@@ -1,0 +1,48 @@
+[project]
+name = "dvi-offline-backend"
+version = "0.1.0"
+description = "Sistema DVI Offline — CCDVI/SEPOL (backend API, uso demonstrativo com dados fictícios)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.115.12",
+    "uvicorn[standard]==0.34.2",
+    "sqlalchemy==2.0.41",
+    "alembic==1.16.1",
+    "psycopg[binary]==3.2.9",
+    "pydantic==2.11.5",
+    "pydantic-settings==2.9.1",
+    "argon2-cffi==23.1.0",
+    "python-multipart==0.0.20",
+    "pillow==11.2.1",
+    "pypdf==5.6.0",
+    "rapidfuzz==3.13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.5",
+    "httpx==0.28.1",
+    "ruff==0.11.12",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["B008", "UP038"]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/versions/*" = ["E501", "W291"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
