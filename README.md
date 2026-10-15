@@ -18,6 +18,49 @@ Plataforma web de **apoio** à identificação de vítimas de desastres (DVI), q
 
 Situação detalhada do que funciona, do que foi testado e do que falta: **[docs/STATUS_IMPLEMENTACAO.md](docs/STATUS_IMPLEMENTACAO.md)**.
 
+## Como funciona
+
+```mermaid
+flowchart LR
+  subgraph LAN["Rede local da operação (sem internet)"]
+    AM["Base Ante Mortem<br/>entrevistas e desaparecidos"]
+    PM["Base Post Mortem<br/>registros e exames"]
+    CMD["Base Principal<br/>reconciliação e coordenação"]
+  end
+  subgraph SRV["Servidor Linux (Podman)"]
+    WEB["Nginx<br/>interface web"]
+    API["API FastAPI<br/>permissões e auditoria"]
+    DB[("PostgreSQL")]
+    ST[("Anexos<br/>SHA-256")]
+  end
+  AM & PM & CMD --> WEB --> API
+  API --> DB
+  API --> ST
+```
+
+```mermaid
+flowchart LR
+  L[Login] --> O[Operação] --> B[Base] --> F[Função]
+  F --> AMf["Ficha AM<br/>entrevistas, sinais, anexos"]
+  F --> PMf["Ficha PM<br/>exames, pertences, custódia"]
+  AMf & PMf --> R["Comparação AM × PM<br/>coincidências e divergências"]
+  R --> H["Análise humana<br/>encaminhamento pericial"]
+```
+
+## Telas
+
+Capturadas automaticamente pelos testes E2E (Playwright), com dados fictícios.
+
+| Seleção de contexto | Ficha AM: sinais particulares |
+|---|---|
+| ![Seleção de operação, base e função](docs/screenshots/02-contexto.png) | ![Ficha AM com sinais](docs/screenshots/04-am-caracteristicas.png) |
+| **Anexos com hash e versões** | **Ficha PM com fotografia** |
+| ![Anexos AM](docs/screenshots/05-am-anexos.png) | ![Anexos PM](docs/screenshots/06-pm-anexos.png) |
+| **Candidatos AM × PM** | **Comparação lado a lado** |
+| ![Candidatos](docs/screenshots/07-reconciliacao-candidatos.png) | ![Comparação](docs/screenshots/08-comparacao-lado-a-lado.png) |
+| **Divergência de lateralidade** | **Auditoria (somente consulta)** |
+| ![Divergências](docs/screenshots/09-comparacao-divergencias.png) | ![Auditoria](docs/screenshots/11-auditoria.png) |
+
 ## Estrutura
 
 ```
