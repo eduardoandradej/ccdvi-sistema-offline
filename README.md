@@ -1,11 +1,115 @@
 # Sistema DVI Offline — CCDVI/SEPOL
 
-Plataforma web de **apoio** à identificação de vítimas de desastres (DVI), que funciona inteiramente em rede local
-(sem internet). A referência metodológica é o *INTERPOL DVI Guide 2023* e os formulários AM/PM 2023.
+**Plataforma web de apoio à identificação de vítimas de desastres (DVI).** Funciona inteiramente na rede local de cada
+base operacional, sem depender de internet. A referência metodológica é o *INTERPOL DVI Guide 2023* e seus formulários
+Ante Mortem (AM) e Post Mortem (PM).
 
-> **Uso demonstrativo, somente com DADOS FICTÍCIOS.** O sistema **não** é homologado pela INTERPOL, **não** realiza
-> identificação e **não** substitui a análise pericial nem o Identification Board. A conformidade legal (LGPD), a
-> segurança para produção e os procedimentos de identificação ainda dependem de avaliação institucional.
+![Mapa estratégico de conectividade DVI](docs/imagens/01-mapa-estrategico-dvi.png)
+
+> [!IMPORTANT]
+> **Uso demonstrativo, somente com DADOS FICTÍCIOS.** O sistema não é homologado pela INTERPOL, não realiza
+> identificação e não substitui a análise pericial nem o Identification Board. Conformidade com a LGPD, segurança
+> para produção e procedimentos de identificação ainda dependem de avaliação institucional.
+
+**Sumário:**
+[Contexto operacional](#contexto-operacional) ·
+[O que o sistema faz](#o-que-o-sistema-faz) ·
+[Telas](#telas) ·
+[Arquitetura do software](#arquitetura-do-software) ·
+[Situação atual](#situação-atual) ·
+[Como executar](#como-executar) ·
+[Testes](#testes) ·
+[Documentação](#documentação)
+
+---
+
+## Contexto operacional
+
+Uma operação DVI se organiza em **três bases**, e cada uma opera de forma autônoma, com servidor local, Wi-Fi para os
+notebooks, nobreak e rádio:
+
+| Base | Função | Uso no sistema |
+|---|---|---|
+| **Base Principal / Comando** | Coordenação, consolidação e reconciliação | Revisão de candidatos AM×PM, painel da operação, auditoria, TIC |
+| **Base Ante Mortem (AM)** | Entrevistas com familiares, cadastro de desaparecidos | Fichas AM, entrevistas, sinais particulares, documentos e fotografias de referência |
+| **Base Post Mortem (PM)** | Núcleo IML / perícia | Fichas PM, exames, pertences, cadeia de custódia, fotografias |
+
+![Topologia: rede autônoma para três bases operacionais](docs/imagens/07-topologia-conectividade-dvi.png)
+
+<details>
+<summary><strong>Base Ante Mortem em detalhe</strong></summary>
+
+![Base Ante Mortem](docs/imagens/04-base-ante-mortem.png)
+
+</details>
+
+### Infraestrutura de cada base
+
+| Física | Lógica |
+|---|---|
+| ![Infraestrutura física da base DVI](docs/imagens/05-infraestrutura-fisica.png) | ![Infraestrutura lógica da base DVI](docs/imagens/06-infraestrutura-logica.png) |
+
+> [!NOTE]
+> As ilustrações mostram o **cenário-alvo**. Hoje o sistema roda e foi testado em **uma instalação** com múltiplos
+> perfis e bases. A sincronização entre bases e a integração com sistemas oficiais estão planejadas, mas ainda **não
+> foram implementadas** (ver [Situação atual](#situação-atual)).
+
+---
+
+## O que o sistema faz
+
+- **Acesso por contexto.** O usuário entra, escolhe operação → base → função e vê apenas os módulos permitidos. O
+  servidor confere a autorização em toda requisição; esconder botões na tela não basta.
+- **Fichas AM e PM em abas.** Seguem os formulários INTERPOL 2023, com salvamento parcial e numeração conforme o
+  Anexo 9 (ex.: `AM55-0001`, `PM55-0001-A`). Cada campo exibe o código do formulário de origem.
+- **Fotografias e documentos.** Aceita JPEG, PNG e PDF, validados pelo conteúdo. O original é preservado com hash
+  SHA-256, e as versões novas nunca sobrescrevem o anterior. A visualização remove dados de localização (GPS), e todo
+  acesso é autenticado.
+- **Comparação AM × PM.** Mostra os candidatos lado a lado e explica coincidências, divergências e informações
+  ausentes. Ausência não conta como incompatibilidade. **Não existe identificação automática:** o sistema apenas
+  encaminha os pares à análise pericial.
+- **Auditoria.** Cada ação fica registrada em uma trilha que o próprio banco de dados impede de alterar ou apagar.
+
+## Telas
+
+Capturadas automaticamente pelos testes de ponta a ponta (Playwright), com dados fictícios.
+
+| Seleção de operação, base e função | Ficha AM: sinais particulares |
+|---|---|
+| ![Seleção de contexto](docs/screenshots/02-contexto.png) | ![Ficha AM](docs/screenshots/04-am-caracteristicas.png) |
+| **Anexos com hash e versões** | **Ficha PM com fotografia** |
+| ![Anexos AM](docs/screenshots/05-am-anexos.png) | ![Anexos PM](docs/screenshots/06-pm-anexos.png) |
+| **Candidatos AM × PM** | **Comparação lado a lado** |
+| ![Candidatos](docs/screenshots/07-reconciliacao-candidatos.png) | ![Comparação](docs/screenshots/08-comparacao-lado-a-lado.png) |
+| **Divergência de lateralidade** | **Trilha de auditoria** |
+| ![Divergências](docs/screenshots/09-comparacao-divergencias.png) | ![Auditoria](docs/screenshots/11-auditoria.png) |
+
+## Arquitetura do software
+
+```mermaid
+flowchart LR
+  subgraph LAN["Rede local da base (sem internet)"]
+    N["Notebooks e tablets"]
+  end
+  subgraph SRV["Servidor Linux — Podman/Quadlet"]
+    WEB["Nginx<br/>interface web"]
+    API["API FastAPI<br/>permissões e auditoria"]
+    DB[("PostgreSQL 16")]
+    ST[("Anexos<br/>originais + SHA-256")]
+  end
+  N --> WEB --> API
+  API --> DB
+  API --> ST
+```
+
+```mermaid
+flowchart LR
+  L[Login] --> O[Operação] --> B[Base] --> F[Função]
+  F --> AMf["Ficha AM<br/>entrevistas, sinais, anexos"]
+  F --> PMf["Ficha PM<br/>exames, pertences, custódia"]
+  AMf & PMf --> R["Comparação AM × PM"]
+  R --> H["Análise humana<br/>encaminhamento pericial"]
+```
 
 | Camada | Tecnologia |
 |---|---|
@@ -16,25 +120,33 @@ Plataforma web de **apoio** à identificação de vítimas de desastres (DVI), q
 | Implantação | Podman + Quadlet/systemd, Nginx como proxy reverso |
 | Testes | pytest (API, contra PostgreSQL real), Playwright (E2E), Ruff |
 
-Situação detalhada do que funciona, do que foi testado e do que falta: **[docs/STATUS_IMPLEMENTACAO.md](docs/STATUS_IMPLEMENTACAO.md)**.
-
-## Estrutura
-
 ```
 backend/            API FastAPI (app/), migrações (alembic/), testes (tests/)
 frontend/           Interface React/TS (src/), testes E2E Playwright (e2e/)
 deploy/             Containerfiles, Nginx, unidades Quadlet, exemplo de configuração
 scripts/            dev-up, podman-deploy, backup/restore, verificação de recursos externos
 tests/amostras/     Arquivos sintéticos (marca d'água "TESTE — DADO FICTÍCIO") para upload manual
-docs/               Etapa A, arquitetura, rastreabilidade, RBAC, instalação, status, OpenAPI, screenshots
+docs/               Especificação, arquitetura, rastreabilidade, RBAC, instalação, status, imagens
 ```
 
-## Início rápido (desenvolvimento em Ubuntu 24.04)
+## Situação atual
 
-Guia completo, inclusive implantação com Podman: [docs/INSTALACAO.md](docs/INSTALACAO.md).
+Versão **0.1.0**, primeiro MVP. Detalhamento completo em
+[docs/STATUS_IMPLEMENTACAO.md](docs/STATUS_IMPLEMENTACAO.md).
+
+| | |
+|---|---|
+| ✅ **Testado** | Login e contexto, fichas AM/PM, anexos, comparação e revisão, isolamento entre perfis, auditoria, backup/restore |
+| 🧪 **Resultados** | 38 testes de API e 5 testes de navegador aprovados; backup restaurado com 9 anexos verificados por SHA-256 |
+| ⏳ **Pendente** | Implantação Podman/Quadlet validada em servidor real, teste com a internet fisicamente desligada, exportação PDF/CSV, cadastro de operações pela interface |
+| 🗺️ **Planejado** | Sincronização entre as três bases por pacotes cifrados; integração com sistemas oficiais (SPT Web) |
+
+## Como executar
+
+Guia completo, com implantação em Podman e instalação sem internet: [docs/INSTALACAO.md](docs/INSTALACAO.md).
 
 ```bash
-# 1. Dependências do sistema
+# 1. Dependências (Ubuntu 24.04)
 sudo apt install -y postgresql-16 python3.12-venv nodejs npm   # Node 22 recomendado
 
 # 2. Banco (troque a senha)
@@ -44,25 +156,21 @@ sudo -u postgres psql -c "CREATE DATABASE dvi OWNER dvi;"
 # 3. Configuração
 cp .env.example backend/.env          # ajuste DVI_DATABASE_URL e DVI_SEED_PASSWORD
 
-# 4. Instala dependências, aplica migrações, cria dados fictícios e inicia API + interface
+# 4. Instala, migra, cria dados fictícios e inicia API + interface
 scripts/dev-up.sh
 ```
 
-Acesso:
-
 | Endereço | Uso |
 |---|---|
-| `http://<IP-do-servidor>:5173` | Interface em desenvolvimento (Vite, com proxy para a API) |
+| `http://<IP-do-servidor>:5173` | Interface em desenvolvimento |
+| `http://<IP-do-servidor>:8080` | Interface em produção (Nginx via Podman/Quadlet) |
 | `http://127.0.0.1:8000/api/health` | Saúde da API |
 | `http://127.0.0.1:8000/api/openapi.json` | Esquema OpenAPI (cópia em [docs/openapi.json](docs/openapi.json)) |
-| `http://<IP-do-servidor>:8080` | Interface em produção (Nginx via Podman/Quadlet) |
-
-O Swagger UI fica desabilitado de propósito, porque carrega arquivos de CDN.
 
 ### Usuários de laboratório (fictícios)
 
-São criados por `python -m app.seed`. A senha vem de `DVI_SEED_PASSWORD`; se a variável não for definida, o script gera
-uma senha aleatória e a exibe uma única vez. Não existe senha padrão versionada.
+Criados por `python -m app.seed`. A senha vem de `DVI_SEED_PASSWORD`; se a variável não for definida, o script gera
+uma senha aleatória e a exibe uma única vez. Não há senha padrão no repositório.
 
 | Usuário | Base | Função |
 |---|---|---|
@@ -74,38 +182,40 @@ uma senha aleatória e a exibe uma única vez. Não existe senha padrão version
 | `auditor` | Base Principal | AUDITOR |
 | `perito.multi` | Bases AM e PM | OPERADOR_AM e OPERADOR_PM |
 
-Com `--demo-records`, o seed também cria registros fictícios para os cenários de demonstração 5, 6 e 7 do prompt:
-uma AM com tatuagem de rosa no antebraço direito, um PM compatível, um PM com lateralidade oposta e casos com dados
-ausentes.
+Com `--demo-records`, o seed também cria registros fictícios para os cenários de demonstração. Entre eles, uma AM
+com tatuagem de rosa no antebraço direito, um PM compatível, um PM com lateralidade oposta e casos com dados ausentes.
 
 ## Testes
 
 ```bash
-# API: 38 testes contra PostgreSQL real (banco dedicado dvi_test, recriado a cada execução)
+# API: testes contra PostgreSQL real (banco dvi_test, recriado a cada execução)
 cd backend
 DVI_TEST_DATABASE_URL=postgresql+psycopg://dvi:SENHA@localhost:5432/dvi_test .venv/bin/pytest
 .venv/bin/ruff check .
 
-# Interface: verificação de tipos e build
-cd ../frontend && npm run build
-../scripts/check-offline-assets.sh        # garante que nenhum recurso externo é referenciado
+# Interface: tipos e build; garante que nenhum recurso externo é referenciado
+cd ../frontend && npm run build && ../scripts/check-offline-assets.sh
 
 # Backup -> restore em banco limpo, com verificação de SHA-256 dos anexos
 SRC_URL=postgresql+psycopg://dvi:SENHA@localhost:5432/dvi SRC_STORAGE=backend/var/storage scripts/test-backup-restore.sh
 
-# E2E (com API e interface rodando e seed --demo-records aplicado):
-npx vite preview --port 4173 &            # serve dist/ com proxy para a API
+# E2E (API e interface rodando, seed --demo-records aplicado)
+npx vite preview --port 4173 &
 DVI_E2E_PASSWORD=<senha do seed> npx playwright test
 ```
 
 ## Documentação
 
-- [docs/ETAPA_A.md](docs/ETAPA_A.md): requisitos extraídos, decisões de arquitetura e dúvidas em aberto
-- [docs/ARQUITETURA.md](docs/ARQUITETURA.md): diagrama lógico, modelo entidade-relacionamento e decisões de segurança
-- [docs/RASTREABILIDADE.md](docs/RASTREABILIDADE.md): mapeamento entre campo/tela e o documento ou formulário de origem
-- [docs/RBAC.md](docs/RBAC.md): matriz de permissões por endpoint (lista completa dos 50 endpoints)
-- [docs/ESQUEMA_BANCO.md](docs/ESQUEMA_BANCO.md): tabelas, colunas, restrições e comandos de migração
-- [docs/INSTALACAO.md](docs/INSTALACAO.md): instalação, implantação com Podman/Quadlet, backup/restore e teste sem internet
-- [docs/STATUS_IMPLEMENTACAO.md](docs/STATUS_IMPLEMENTACAO.md): o que está implementado, testado, pendente e bloqueado
-- [docs/screenshots/](docs/screenshots/): telas reais capturadas pelos testes E2E
-- [LICENSES.md](LICENSES.md): licenças das dependências
+| Documento | Conteúdo |
+|---|---|
+| [ETAPA_A.md](docs/ETAPA_A.md) | Requisitos extraídos dos documentos INTERPOL, decisões e dúvidas em aberto |
+| [ARQUITETURA.md](docs/ARQUITETURA.md) | Diagramas, modelo entidade-relacionamento, motor de comparação e segurança |
+| [RASTREABILIDADE.md](docs/RASTREABILIDADE.md) | Cada campo/tela relacionado ao formulário ou anexo de origem |
+| [RBAC.md](docs/RBAC.md) | Matriz de permissões e lista dos endpoints |
+| [ESQUEMA_BANCO.md](docs/ESQUEMA_BANCO.md) | Tabelas, colunas, restrições e migrações |
+| [INSTALACAO.md](docs/INSTALACAO.md) | Instalação, Podman/Quadlet, backup/restore e operação sem internet |
+| [STATUS_IMPLEMENTACAO.md](docs/STATUS_IMPLEMENTACAO.md) | Implementado, testado, pendente e bloqueado |
+| [LICENSES.md](LICENSES.md) | Licenças das dependências |
+
+Documentos de referência em `docs/`: especificação de desenvolvimento v1.1, fluxo de telas, *INTERPOL DVI Guide
+2023*, formulários AM/PM e Anexos 4, 5, 6 e 9.
