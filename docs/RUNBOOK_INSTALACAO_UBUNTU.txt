@@ -1,0 +1,313 @@
+===============================================================================
+ SISTEMA DVI OFFLINE - CCDVI/SEPOL
+ RUNBOOK DE INSTALACAO E EXECUCAO - UBUNTU 24.04 LTS
+===============================================================================
+
+ Versao do runbook ....: 1.0 (15/10/2026)
+ Versao do sistema ....: 0.1.0 (MVP)
+ Modo de execucao .....: instalacao nativa (sem conteineres), em um servidor
+                         ou notebook Ubuntu, acessada pelo navegador na rede
+                         local.
+ Uso ..................: DEMONSTRATIVO, SOMENTE COM DADOS FICTICIOS.
+
+ Validacao: este roteiro foi executado do inicio ao fim em Ubuntu 24.04.5 LTS,
+ a partir de um clone novo do repositorio e de um banco vazio. Depois da
+ instalacao, os 5 testes automatizados de navegador (login, cadastro AM e PM,
+ anexos, comparacao e permissoes) foram aprovados.
+
+ Convencoes:
+   $  comando executado como usuario comum (com permissao de sudo)
+   #  comentario (nao digite)
+   <...> valor que voce deve escolher
+
+
+-------------------------------------------------------------------------------
+ 0. REQUISITOS
+-------------------------------------------------------------------------------
+
+ - Ubuntu Server ou Desktop 24.04 LTS, 64 bits (x86_64).
+ - Minimo sugerido: 4 nucleos, 8 GB de RAM, 20 GB livres em disco.
+ - Usuario com permissao de sudo.
+ - Internet DURANTE A INSTALACAO (para baixar pacotes). Depois de instalado,
+   o sistema funciona somente na rede local, sem internet.
+ - Portas usadas: 5173 (interface web) e 8000 (API, apenas local).
+
+ Tempo estimado: 15 a 25 minutos.
+
+
+-------------------------------------------------------------------------------
+ 1. ATUALIZAR O SISTEMA E INSTALAR PACOTES BASICOS
+-------------------------------------------------------------------------------
+
+ $ sudo apt update
+ $ sudo apt -y upgrade
+ $ sudo apt install -y git curl ca-certificates postgresql python3.12-venv
+
+ # Conferir versoes:
+ $ python3 --version          # esperado: Python 3.12.x
+ $ psql --version             # esperado: psql (PostgreSQL) 16.x
+
+
+-------------------------------------------------------------------------------
+ 2. INSTALAR O NODE.JS 22
+-------------------------------------------------------------------------------
+
+ O Node.js do repositorio padrao do Ubuntu 24.04 e antigo (versao 18). Use o
+ repositorio oficial NodeSource, versao 22:
+
+ $ curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/nodesource_setup.sh
+ $ sudo bash /tmp/nodesource_setup.sh
+ $ sudo apt install -y nodejs
+
+ # Conferir:
+ $ node --version             # esperado: v22.x
+ $ npm --version              # esperado: 10.x
+
+
+-------------------------------------------------------------------------------
+ 3. INICIAR O POSTGRESQL E CRIAR O BANCO
+-------------------------------------------------------------------------------
+
+ 3.1 Iniciar o servico e habilitar inicio automatico no boot:
+
+ $ sudo systemctl enable --now postgresql
+ $ sudo systemctl status postgresql --no-pager      # deve mostrar "active"
+
+ 3.2 Criar usuario e banco. ESCOLHA UMA SENHA e anote (use apenas letras,
+     numeros e hifen para evitar problemas na URL de conexao):
+
+ $ sudo -u postgres psql -c "CREATE ROLE dvi LOGIN PASSWORD '<SENHA_DO_BANCO>';"
+ $ sudo -u postgres psql -c "CREATE DATABASE dvi OWNER dvi;"
+
+ # Testar a conexao (pede a senha do banco):
+ $ psql -h localhost -U dvi -d dvi -c "select 1;"
+ # Deve mostrar uma tabela com o valor 1. Saia se ficar no prompt (\q).
+
+
+-------------------------------------------------------------------------------
+ 4. BAIXAR O SISTEMA
+-------------------------------------------------------------------------------
+
+ $ cd ~
+ $ git clone https://github.com/eduardoandradej/ccdvi-sistema-offline.git
+ $ cd ccdvi-sistema-offline
+
+ # Se o repositorio for privado, o git pedira usuario e um token de acesso
+ # pessoal do GitHub (no lugar da senha).
+
+
+-------------------------------------------------------------------------------
+ 5. CONFIGURAR
+-------------------------------------------------------------------------------
+
+ 5.1 Criar o arquivo de configuracao a partir do modelo:
+
+ $ cp .env.example backend/.env
+
+ 5.2 Editar o arquivo:
+
+ $ nano backend/.env
+
+ Ajuste estas duas linhas (remova o "#" do inicio da linha da senha do seed):
+
+   DVI_DATABASE_URL=postgresql+psycopg://dvi:<SENHA_DO_BANCO>@localhost:5432/dvi
+   DVI_SEED_PASSWORD=<SENHA_DOS_USUARIOS_DE_LABORATORIO>
+
+   - <SENHA_DO_BANCO> e a mesma do passo 3.2.
+   - <SENHA_DOS_USUARIOS_DE_LABORATORIO> deve ter NO MINIMO 10 caracteres.
+     Ela sera usada por todos os usuarios ficticios de demonstracao.
+
+ Salve com Ctrl+O, Enter, e saia com Ctrl+X.
+
+ 5.3 Proteger o arquivo (contem senhas):
+
+ $ chmod 600 backend/.env
+
+ 5.4 Garantir que os scripts sao executaveis:
+
+ $ chmod +x scripts/*.sh
+
+
+-------------------------------------------------------------------------------
+ 6. INSTALAR DEPENDENCIAS E INICIAR A APLICACAO
+-------------------------------------------------------------------------------
+
+ Um unico script faz tudo: cria o ambiente Python, instala as dependencias,
+ cria as tabelas no banco (migracoes), cadastra a operacao, as bases e os
+ usuarios ficticios com registros de demonstracao, instala a interface e
+ inicia API + interface.
+
+ $ scripts/dev-up.sh
+
+ Na primeira execucao leva alguns minutos (download de dependencias).
+ Sinais de sucesso no terminal, nesta ordem:
+
+   Running upgrade  -> 0001, esquema inicial
+   Operacao: SIMULADO CCDVI 2026
+   Usuarios de laboratorio: operador.am, operador.pm, revisor, ...
+   Frontend: http://<IP>:5173  (API em 127.0.0.1:8000)
+   VITE v5.4.21  ready
+   Uvicorn running on http://127.0.0.1:8000
+
+ O terminal fica "preso" mostrando os registros: isso e normal. A aplicacao
+ funciona enquanto esse terminal estiver aberto. Para parar: Ctrl+C.
+
+
+-------------------------------------------------------------------------------
+ 7. ACESSAR
+-------------------------------------------------------------------------------
+
+ 7.1 No proprio computador: abra o navegador em
+       http://localhost:5173
+
+ 7.2 Em outros notebooks/tablets da MESMA rede: descubra o IP do servidor
+
+ $ hostname -I
+       # use o primeiro endereco, ex.: 192.168.10.20
+
+     e abra no navegador:  http://192.168.10.20:5173
+
+ 7.3 Se o firewall (ufw) estiver ativo, libere a porta para a rede local
+     (troque pela sub-rede real da operacao):
+
+ $ sudo ufw allow from 192.168.10.0/24 to any port 5173 proto tcp
+
+ 7.4 Entrar com um usuario de laboratorio (senha = DVI_SEED_PASSWORD):
+
+   Usuario          Base               Funcao
+   ---------------  -----------------  ----------------------------------
+   operador.am      Base Ante Mortem   Operador Ante Mortem
+   operador.pm      Base Post Mortem   Operador/Perito Post Mortem
+   revisor          Base Principal     Revisor de Reconciliacao
+   coordenador      Base Principal     Coordenador
+   admin.tic        Base Principal     Administrador TIC
+   auditor          Base Principal     Auditor
+   perito.multi     Bases AM e PM      Operador AM e Operador PM
+
+ 7.5 Fluxo: Entrar -> escolher "SIMULADO CCDVI 2026" -> escolher a base ->
+     escolher a funcao. Arquivos ficticios para testar o envio de anexos
+     estao na pasta tests/amostras/ do repositorio.
+
+
+-------------------------------------------------------------------------------
+ 8. VERIFICACAO RAPIDA (CHECKLIST)
+-------------------------------------------------------------------------------
+
+ Em OUTRO terminal, com a aplicacao rodando:
+
+ $ curl -s http://localhost:5173/api/health
+       # esperado: {"status":"ok"}
+
+ No navegador:
+   [ ] Login com operador.am funciona e mostra a selecao de contexto.
+   [ ] Em "Ante Mortem", ha 3 registros de demonstracao (AM55-0001 a 0003).
+   [ ] Criar um novo desaparecido e "Salvar rascunho" mostra
+       "Gravado no banco de dados".
+   [ ] Em "Fotos e documentos", enviar tests/amostras/foto_referencia_ficticia.jpg
+       mostra "armazenado e confirmado".
+   [ ] Login com revisor -> Reconciliacao -> MARIA SILVA FICTICIA ->
+       "comparar lado a lado" mostra a comparacao com justificativas.
+
+
+-------------------------------------------------------------------------------
+ 9. OPERACAO DO DIA A DIA
+-------------------------------------------------------------------------------
+
+ Parar ............: Ctrl+C no terminal do dev-up.sh.
+
+ Iniciar de novo ..: (as dependencias e os dados ja existem)
+ $ cd ~/ccdvi-sistema-offline
+ $ scripts/dev-up.sh --no-seed
+       # --no-seed evita a etapa de dados de demonstracao (ela e segura de
+       # repetir, mas desnecessaria).
+
+ Manter rodando apos fechar o terminal/SSH:
+ $ cd ~/ccdvi-sistema-offline
+ $ nohup scripts/dev-up.sh --no-seed > ~/dvi.log 2>&1 &
+       # acompanhar:  tail -f ~/dvi.log
+       # parar:       pkill -f uvicorn ; pkill -f vite
+
+ Depois de reiniciar o servidor: o PostgreSQL volta sozinho (passo 3.1);
+ basta iniciar a aplicacao novamente.
+
+ Onde ficam os dados:
+   - Banco ............: PostgreSQL, banco "dvi"
+   - Anexos ...........: ~/ccdvi-sistema-offline/backend/var/storage/
+
+ Backup (gera um arquivo .tar com banco + anexos + hashes):
+ $ cd ~/ccdvi-sistema-offline
+ $ set -a; . backend/.env; set +a
+ $ export PGPASSWORD=<SENHA_DO_BANCO>
+ $ DVI_STORAGE_DIR=backend/var/storage scripts/backup.sh ~/backups-dvi
+       # Para backup criptografado, defina antes DVI_BACKUP_GPG_RECIPIENT
+       # (veja docs/INSTALACAO.md, secao 3).
+
+ Atualizar para uma nova versao do sistema:
+ $ cd ~/ccdvi-sistema-offline
+ $ git pull
+ $ rm -rf backend/.venv frontend/node_modules   # forca reinstalar dependencias
+ $ scripts/dev-up.sh --no-seed       # aplica migracoes novas automaticamente
+
+
+-------------------------------------------------------------------------------
+ 10. SOLUCAO DE PROBLEMAS
+-------------------------------------------------------------------------------
+
+ "DVI_DATABASE_URL: Defina DVI_DATABASE_URL em backend/.env"
+   -> O arquivo backend/.env nao existe ou a linha esta comentada. Refaca o
+      passo 5.
+
+ "connection ... failed: Connection refused" (porta 5432)
+   -> PostgreSQL parado.  $ sudo systemctl start postgresql
+
+ "password authentication failed for user dvi"
+   -> Senha em backend/.env diferente da criada no passo 3.2. Para redefinir:
+      $ sudo -u postgres psql -c "ALTER ROLE dvi PASSWORD '<NOVA_SENHA>';"
+      e atualize backend/.env.
+
+ "DVI_SEED_PASSWORD invalida: A senha deve ter pelo menos 10 caracteres."
+   -> Ajuste DVI_SEED_PASSWORD no backend/.env (minimo 10 caracteres).
+
+ "Address already in use" (porta 8000 ou 5173)
+   -> Ja existe uma instancia rodando.  $ pkill -f uvicorn ; pkill -f vite
+      e inicie novamente.
+
+ "Permission denied" ao executar scripts/dev-up.sh
+   -> $ chmod +x scripts/*.sh
+
+ Erros de sintaxe do Vite/npm ou "Unsupported engine"
+   -> Node.js antigo. Confira  $ node --version  (precisa ser v22.x).
+      Refaca o passo 2 e depois:  $ rm -rf frontend/node_modules
+
+ Erro ao instalar dependencias Python ("ensurepip" / "venv")
+   -> $ sudo apt install -y python3.12-venv
+      $ rm -rf backend/.venv   e execute scripts/dev-up.sh novamente.
+
+ Outro computador nao abre a pagina
+   -> Use o IP correto (hostname -I), confirme a mesma rede Wi-Fi/LAN e
+      libere a porta 5173 no firewall (passo 7.3).
+
+ "Usuario ou senha invalidos" no login
+   -> Os usuarios sao criados com a senha que estava em DVI_SEED_PASSWORD
+      NA PRIMEIRA execucao. Alterar a variavel depois nao muda senhas ja
+      criadas.
+
+ "Muitas tentativas. Aguarde alguns minutos."
+   -> Bloqueio de seguranca apos 5 senhas erradas. Aguarde 15 minutos ou
+      reinicie a aplicacao.
+
+
+-------------------------------------------------------------------------------
+ 11. OBSERVACOES IMPORTANTES
+-------------------------------------------------------------------------------
+
+ - Este modo (nativo, com scripts/dev-up.sh) e o validado para demonstracao
+   e laboratorio. A implantacao com Podman/Quadlet (pasta deploy/) esta
+   documentada em docs/INSTALACAO.md, mas AINDA NAO FOI VALIDADA em servidor.
+ - Use somente dados ficticios. O sistema nao e homologado pela INTERPOL e
+   nao realiza identificacao de vitimas.
+ - Nao versione nem compartilhe o arquivo backend/.env (contem senhas).
+
+===============================================================================
+ FIM DO RUNBOOK
+===============================================================================

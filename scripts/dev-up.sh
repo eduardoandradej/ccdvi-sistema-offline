@@ -26,4 +26,4 @@ API_PID=$!
 trap 'kill $API_PID 2>/dev/null' EXIT
 cd "$ROOT/frontend"
 echo "Frontend: http://$(hostname -I 2>/dev/null | awk '{print $1}'):5173  (API em 127.0.0.1:8000)"
-npx vite --host 0.0.0.0 --port 5173
+npx vite --host 0.0.0.0 --port 5173 --strictPort
