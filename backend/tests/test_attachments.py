@@ -46,7 +46,8 @@ def test_exif_gps_removido_na_visualizacao(am_user):
     exif = Image.open(io.BytesIO(out)).getexif()
     assert exif.get(0x8825) is None and exif.get(0x010F) is None
     # o original continua preservado byte a byte (hash registrado = hash do arquivo enviado)
-    assert am_user.get(f"/api/attachments/{att['id']}/verify").json()["sha256_atual"] == hashlib.sha256(data).hexdigest()
+    verified = am_user.get(f"/api/attachments/{att['id']}/verify").json()
+    assert verified["sha256_atual"] == hashlib.sha256(data).hexdigest()
 
 
 def test_extensao_forjada_e_tipos_proibidos_rejeitados(am_user):

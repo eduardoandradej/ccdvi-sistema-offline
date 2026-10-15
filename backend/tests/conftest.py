@@ -14,11 +14,11 @@ os.environ["DVI_DATABASE_URL"] = TEST_DB
 os.environ["DVI_STORAGE_DIR"] = tempfile.mkdtemp(prefix="dvi-test-storage-")
 os.environ["DVI_MAX_UPLOAD_MB"] = "2"
 
-from alembic import command  # noqa: E402
-from alembic.config import Config  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 
+from alembic import command  # noqa: E402
+from alembic.config import Config  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.db import SessionLocal, reset_engine  # noqa: E402
 

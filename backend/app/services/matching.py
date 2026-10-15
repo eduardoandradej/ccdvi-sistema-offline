@@ -18,6 +18,7 @@ from datetime import date
 from rapidfuzz import fuzz
 
 from app.vocab import (
+    COLOURS,
     EFFECT_FIELDS,
     EFFECT_ITEMS,
     MARK_TYPES,
@@ -346,7 +347,8 @@ def compare_marks(am: AmIn, pm: PmIn, params: dict, w: dict) -> list[FieldResult
 def _effect_label(e: EffectIn) -> str:
     item = EFFECT_ITEMS.get(e.field_code, {}).get(e.item_code, e.item_code)
     parts = [item]
-    for v in (e.type_style, e.colour, e.brand, e.material, e.inscription):
+    for v in (e.type_style, COLOURS.get(e.colour, e.colour) if e.colour else None, e.brand, e.material,
+              e.inscription):
         if v:
             parts.append(v)
     if e.serial_number:

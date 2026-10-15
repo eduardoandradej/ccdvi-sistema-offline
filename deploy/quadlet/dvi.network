@@ -1,0 +1,3 @@
+[Network]
+NetworkName=dvi
+# Rede interna dos contêineres; somente dvi-web publica porta na LAN.

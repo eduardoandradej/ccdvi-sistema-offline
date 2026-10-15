@@ -1,0 +1,22 @@
+# Imagem da API (FastAPI). Construir a partir da raiz do repositório:
+#   podman build -f deploy/Containerfile.backend -t localhost/dvi-api:0.1.0 .
+FROM docker.io/library/python:3.12-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 \
+    DVI_STORAGE_DIR=/var/lib/dvi/storage
+
+RUN groupadd --system --gid 10001 dvi && useradd --system --uid 10001 --gid dvi --home /app dvi
+WORKDIR /app
+COPY backend/pyproject.toml ./
+COPY backend/app ./app
+RUN pip install --no-cache-dir . && rm -rf /root/.cache
+COPY backend/alembic.ini ./
+COPY backend/alembic ./alembic
+COPY deploy/api-entrypoint.sh /usr/local/bin/api-entrypoint.sh
+RUN chmod 0755 /usr/local/bin/api-entrypoint.sh && mkdir -p /var/lib/dvi/storage && chown -R dvi:dvi /var/lib/dvi
+
+USER dvi
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')" || exit 1
+ENTRYPOINT ["/usr/local/bin/api-entrypoint.sh"]

@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -99,6 +99,9 @@ def update_case(case_id: uuid.UUID, body: PmCaseUpdate, ctx: Ctx = Depends(requi
         data.pop("status", None)
     for k, v in data.items():
         setattr(case, k, v)
+    if case.status == "PRONTO_RECONCILIACAO":
+        custody = db.scalar(select(func.count()).select_from(CustodyEvent).where(CustodyEvent.pm_case_id == case.id))
+        common.ensure_ready(common.pm_missing(case, custody))
     common.touch(case, ctx)
     audit.record(db, "PM_ALTERADO", ctx=ctx, object_type="pm_case", object_id=case.id,
                  details=audit.diff(before, common.snapshot(case, CASE_FIELDS)))

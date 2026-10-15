@@ -83,3 +83,28 @@ def jpeg_with_gps_exif() -> bytes:
     out = io.BytesIO()
     img.save(out, format="JPEG", exif=exif.tobytes())
     return out.getvalue()
+
+
+def write_samples(target: str) -> list[str]:
+    """Grava amostras sintéticas para upload manual pela interface."""
+    import pathlib
+
+    out = pathlib.Path(target)
+    out.mkdir(parents=True, exist_ok=True)
+    files = {
+        "foto_referencia_ficticia.jpg": reference_photo("Fotografia de referência fictícia"),
+        "documento_identidade_ficticio.pdf": id_document_pdf(),
+        "prontuario_odontologico_ficticio.pdf": dental_record_pdf(),
+        "foto_vestimenta_ficticia.png": object_photo("Vestimenta fictícia (calça jeans azul)"),
+        "foto_com_gps_ficticio.jpg": jpeg_with_gps_exif(),
+    }
+    for name, data in files.items():
+        (out / name).write_bytes(data)
+    return [str(out / n) for n in files]
+
+
+if __name__ == "__main__":
+    import sys
+
+    for path in write_samples(sys.argv[1] if len(sys.argv) > 1 else "amostras"):
+        print(path)

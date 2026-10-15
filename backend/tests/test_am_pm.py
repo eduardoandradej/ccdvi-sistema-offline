@@ -136,3 +136,16 @@ def test_auditoria_e_imutavel():
         with pytest.raises(DBAPIError):
             db.execute(text("DELETE FROM audit_events"))
         db.rollback()
+
+
+def test_pronto_para_reconciliacao_exige_campos_minimos(am_user, pm_user):
+    case = am_user.post("/api/am", json={"family_name": "INCOMPLETO"}).json()
+    r = am_user.put(f"/api/am/{case['id']}", json={"expected_version": 1, "status": "PRONTO_RECONCILIACAO"})
+    assert r.status_code == 422 and "entrevista" in r.json()["detail"]
+    am_user.post(f"/api/am/{case['id']}/interviews", json={"informant_name": "FONTE FICTÍCIA"})
+    r = am_user.put(f"/api/am/{case['id']}", json={"expected_version": 2, "given_names": "X", "sex": "M",
+                                                   "age_years": 40, "status": "PRONTO_RECONCILIACAO"})
+    assert r.status_code == 200 and r.json()["status"] == "PRONTO_RECONCILIACAO"
+    pm = pm_user.post("/api/pm", json={"sex": "M", "state_of_body": "COMPLETO", "recovery_date": "2026-03-11"}).json()
+    r = pm_user.put(f"/api/pm/{pm['id']}", json={"expected_version": 1, "status": "PRONTO_RECONCILIACAO"})
+    assert r.status_code == 422 and "custódia" in r.json()["detail"]

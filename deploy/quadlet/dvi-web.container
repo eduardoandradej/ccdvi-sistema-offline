@@ -1,0 +1,17 @@
+[Unit]
+Description=DVI Offline - Nginx (frontend e proxy)
+Requires=dvi-api.service
+After=dvi-api.service
+
+[Container]
+ContainerName=dvi-web
+Image=localhost/dvi-web:0.1.0
+Network=dvi.network
+# Porta publicada na rede local (LAN/Wi-Fi). Ajuste o firewall para aceitar apenas a sub-rede da operação.
+PublishPort=8080:8080
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

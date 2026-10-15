@@ -115,3 +115,40 @@ def version_conflict() -> HTTPException:
         "O registro foi alterado por outra pessoa desde que foi aberto. Recarregue antes de salvar.",
     )
 
+
+
+def am_missing(case) -> list[str]:
+    """Campos mínimos para um registro AM ser marcado como pronto para reconciliação."""
+    missing = []
+    if not case.family_name:
+        missing.append("sobrenome")
+    if not case.given_names:
+        missing.append("nome(s)")
+    if not case.sex:
+        missing.append("sexo")
+    if case.date_of_birth is None and case.age_years is None:
+        missing.append("data de nascimento ou idade")
+    if not case.interviews:
+        missing.append("ao menos uma entrevista/fonte")
+    return missing
+
+
+def pm_missing(case, custody_count: int) -> list[str]:
+    missing = []
+    if not case.state_of_body:
+        missing.append("estado do corpo (402)")
+    if not case.sex:
+        missing.append("sexo (535)")
+    if case.recovery_date is None:
+        missing.append("data de recuperação")
+    if custody_count < 1:
+        missing.append("registro de recebimento na cadeia de custódia")
+    return missing
+
+
+def ensure_ready(missing: list[str]) -> None:
+    if missing:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Não é possível marcar como pronto para reconciliação. Pendências: " + ", ".join(missing) + ".",
+        )

@@ -1,0 +1,19 @@
+[Unit]
+Description=DVI Offline - API
+Requires=dvi-db.service
+After=dvi-db.service
+
+[Container]
+ContainerName=dvi-api
+Image=localhost/dvi-api:0.1.0
+Network=dvi.network
+Volume=dvi-storage.volume:/var/lib/dvi/storage
+# Contém postgresql+psycopg://dvi:<senha>@dvi-db:5432/dvi
+Secret=dvi_database_url
+EnvironmentFile=/etc/dvi/dvi.env
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

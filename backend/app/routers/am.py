@@ -99,6 +99,8 @@ def update_case(case_id: uuid.UUID, body: AmCaseUpdate, ctx: Ctx = Depends(requi
         data.pop("status", None)
     for k, v in data.items():
         setattr(case, k, v)
+    if case.status == "PRONTO_RECONCILIACAO":
+        common.ensure_ready(common.am_missing(case))
     common.touch(case, ctx)
     audit.record(db, "AM_ALTERADO", ctx=ctx, object_type="am_case", object_id=case.id,
                  details=audit.diff(before, common.snapshot(case, CASE_FIELDS)))
