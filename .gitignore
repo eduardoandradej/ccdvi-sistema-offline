@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+# Dados locais (NUNCA versionar anexos, bancos ou segredos)
+backend/var/
+var/
+.env
+*.env.local
+backups/
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
