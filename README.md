@@ -145,6 +145,15 @@ Versão **0.1.0**, primeiro MVP. Detalhamento completo em
 
 Guia completo, com implantação em Podman e instalação sem internet: [docs/INSTALACAO.md](docs/INSTALACAO.md).
 
+### Instalação prática no Ubuntu Server 24.04 LTS
+
+Para instalação nativa do Sistema DVI Offline, consulte o
+[Runbook de Instalação e Operação do Sistema DVI](Runbook_Instalacao_Ubuntu_CCDVI_Sistema.txt).
+
+O runbook inclui preparação do ambiente, PostgreSQL, aplicação web,
+configuração do systemd e comandos de gerenciamento do serviço.
+
+
 ```bash
 # 1. Dependências (Ubuntu 24.04)
 sudo apt install -y postgresql-16 python3.12-venv nodejs npm   # Node 22 recomendado

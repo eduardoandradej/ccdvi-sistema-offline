@@ -3,7 +3,7 @@
  RUNBOOK DE INSTALACAO E EXECUCAO - UBUNTU 24.04 LTS
 ===============================================================================
 
- Versao do runbook ....: 1.0 (15/10/2026)
+ Versao do runbook ....: 1.1 (15/10/2026) - inclui operacao via systemd
  Versao do sistema ....: 0.1.0 (MVP)
  Modo de execucao .....: instalacao nativa (sem conteineres), em um servidor
                          ou notebook Ubuntu, acessada pelo navegador na rede
@@ -149,8 +149,9 @@
    VITE v5.4.21  ready
    Uvicorn running on http://127.0.0.1:8000
 
- O terminal fica "preso" mostrando os registros: isso e normal. A aplicacao
- funciona enquanto esse terminal estiver aberto. Para parar: Ctrl+C.
+  O terminal fica "preso" mostrando os registros: isso e normal NA PRIMEIRA
+  EXECUCAO. Apos validar a aplicacao, pressione Ctrl+C e configure o servico
+  systemd na secao 9, para que rode em segundo plano e inicie no boot.
 
 
 -------------------------------------------------------------------------------
@@ -210,25 +211,113 @@
 
 
 -------------------------------------------------------------------------------
- 9. OPERACAO DO DIA A DIA
+ 9. CONFIGURAR O SYSTEMD (UMA VEZ, APOS A PRIMEIRA EXECUCAO)
 -------------------------------------------------------------------------------
 
- Parar ............: Ctrl+C no terminal do dev-up.sh.
+ OBJETIVO: iniciar, parar, reiniciar e consultar o Sistema DVI sem manter
+ um terminal aberto. Esta unidade controla API FastAPI e interface Vite.
 
- Iniciar de novo ..: (as dependencias e os dados ja existem)
- $ cd ~/ccdvi-sistema-offline
- $ scripts/dev-up.sh --no-seed
-       # --no-seed evita a etapa de dados de demonstracao (ela e segura de
-       # repetir, mas desnecessaria).
+ IMPORTANTE: esta configuracao foi testada no laboratorio pelo operador.
+ O modo usa o script de desenvolvimento dev-up.sh; nao e implantacao final.
 
- Manter rodando apos fechar o terminal/SSH:
- $ cd ~/ccdvi-sistema-offline
- $ nohup scripts/dev-up.sh --no-seed > ~/dvi.log 2>&1 &
-       # acompanhar:  tail -f ~/dvi.log
-       # parar:       pkill -f uvicorn ; pkill -f vite
+ 9.1 Encerrar qualquer execucao manual antes de criar o servico:
+     - Se scripts/dev-up.sh ainda estiver no terminal, pressione Ctrl+C.
+     - Verifique se as portas 5173 e 8000 estao livres:
+ $ sudo ss -ltnp | grep -E ':(5173|8000)\b' || true
 
- Depois de reiniciar o servidor: o PostgreSQL volta sozinho (passo 3.1);
- basta iniciar a aplicacao novamente.
+     Se outra instancia estiver ocupando as portas, identifique o processo
+     antes de encerra-lo. Evite comandos pkill genericos.
+
+ 9.2 Criar a unidade (caminho e usuario desta VM de laboratorio):
+ $ sudo nano /etc/systemd/system/ccdvi.service
+
+ Cole EXATAMENTE o seguinte conteudo, sem os delimitadores abaixo:
+
+ ----- INICIO: /etc/systemd/system/ccdvi.service -----
+ [Unit]
+ Description=CCDVI - Sistema DVI Offline
+ Wants=network-online.target
+ After=network-online.target postgresql.service
+ Requires=postgresql.service
+
+ [Service]
+ Type=simple
+ User=suporte
+ WorkingDirectory=/home/suporte/ccdvi-sistema-offline
+ ExecStart=/bin/bash /home/suporte/ccdvi-sistema-offline/scripts/dev-up.sh --no-seed
+ Restart=on-failure
+ RestartSec=5
+ KillMode=control-group
+ TimeoutStopSec=20
+
+ [Install]
+ WantedBy=multi-user.target
+ ----- FIM: /etc/systemd/system/ccdvi.service -----
+
+ ATENCAO: ajuste User, WorkingDirectory e ExecStart se o repositorio estiver
+ em outro diretorio ou tiver sido instalado com outro usuario. Este exemplo
+ corresponde ao laboratorio ccdvi-ubuntu-lab (usuario suporte).
+
+ O parametro --no-seed impede repetir a criacao dos dados ficticios.
+ A primeira execucao SEM --no-seed precisa ter ocorrido no passo 6.
+
+ 9.3 Registrar a unidade, ativar no boot e iniciar:
+ $ sudo systemctl daemon-reload
+ $ sudo systemctl enable --now ccdvi.service
+
+ 9.4 Validar o servico e a aplicacao:
+ $ sudo systemctl status ccdvi.service --no-pager
+ $ curl -fsS http://127.0.0.1:5173/api/health
+       # esperado: {"status":"ok"}
+
+ 9.5 Comandos de operacao:
+
+ Iniciar .............: sudo systemctl start ccdvi.service
+ Parar ...............: sudo systemctl stop ccdvi.service
+ Reiniciar ...........: sudo systemctl restart ccdvi.service
+ Status ..............: sudo systemctl status ccdvi.service --no-pager
+ Logs recentes .......: sudo journalctl -u ccdvi.service -n 80 --no-pager
+ Logs ao vivo ........: sudo journalctl -u ccdvi.service -f
+ Habilitar no boot ...: sudo systemctl enable ccdvi.service
+ Desabilitar no boot .: sudo systemctl disable ccdvi.service
+
+ Ao pressionar Ctrl+C durante "journalctl -f", SOMENTE a visualizacao dos
+ logs e interrompida: o servico continua rodando. Para encerrar de verdade,
+ use "sudo systemctl stop ccdvi.service".
+
+ 9.6 Validacao de parada e retorno:
+ $ sudo systemctl stop ccdvi.service
+ $ sudo systemctl is-active ccdvi.service
+       # esperado: inactive
+ $ sudo systemctl start ccdvi.service
+ $ sudo systemctl is-active ccdvi.service
+       # esperado: active
+ $ curl -fsS http://127.0.0.1:5173/api/health
+       # esperado: {"status":"ok"}
+
+ 9.7 Validacao de inicializacao automatica (apos assegurar acesso SSH):
+ $ sudo systemctl is-enabled ccdvi.service
+       # esperado: enabled
+
+     Opcional, em janela de manutencao: reinicie a VM e confirme o status
+     e a API. O PostgreSQL tambem deve iniciar normalmente pelo systemd.
+
+
+-------------------------------------------------------------------------------
+ 10. OPERACAO DO DIA A DIA
+-------------------------------------------------------------------------------
+
+ Agora utilize SEMPRE o servico systemd da secao 9 (nao execute dev-up.sh
+ manualmente enquanto o servico estiver ativo).
+
+ Parar ............: sudo systemctl stop ccdvi.service
+ Iniciar ..........: sudo systemctl start ccdvi.service
+ Reiniciar ........: sudo systemctl restart ccdvi.service
+ Consultar ........: sudo systemctl status ccdvi.service --no-pager
+ Acompanhar logs ..: sudo journalctl -u ccdvi.service -f
+
+ O terminal e liberado imediatamente apos start/stop. No journalctl,
+ Ctrl+C apenas encerra a exibicao dos logs.
 
  Onde ficam os dados:
    - Banco ............: PostgreSQL, banco "dvi"
@@ -242,15 +331,26 @@
        # Para backup criptografado, defina antes DVI_BACKUP_GPG_RECIPIENT
        # (veja docs/INSTALACAO.md, secao 3).
 
- Atualizar para uma nova versao do sistema:
+ ATENCAO: BACKUPS contem informacoes sensiveis e devem ser protegidos.
+
+ Atualizar para nova versao do Sistema DVI (janela de manutencao):
+ $ sudo systemctl stop ccdvi.service
  $ cd ~/ccdvi-sistema-offline
- $ git pull
- $ rm -rf backend/.venv frontend/node_modules   # forca reinstalar dependencias
- $ scripts/dev-up.sh --no-seed       # aplica migracoes novas automaticamente
+ $ git status
+       # so prossiga se nao houver alteracoes locais importantes
+ $ git pull --ff-only
+       # Se necessario, refazer dependencias conforme docs/INSTALACAO.md.
+       # O dev-up.sh executado pelo servico aplica as migracoes no inicio.
+ $ sudo systemctl start ccdvi.service
+ $ sudo systemctl status ccdvi.service --no-pager
+ $ curl -fsS http://127.0.0.1:5173/api/health
+
+ Caso a atualizacao falhe, analise os logs e nao repita operacoes destrutivas:
+ $ sudo journalctl -u ccdvi.service -n 100 --no-pager
 
 
 -------------------------------------------------------------------------------
- 10. SOLUCAO DE PROBLEMAS
+ 11. SOLUCAO DE PROBLEMAS
 -------------------------------------------------------------------------------
 
  "DVI_DATABASE_URL: Defina DVI_DATABASE_URL em backend/.env"
@@ -269,19 +369,29 @@
    -> Ajuste DVI_SEED_PASSWORD no backend/.env (minimo 10 caracteres).
 
  "Address already in use" (porta 8000 ou 5173)
-   -> Ja existe uma instancia rodando.  $ pkill -f uvicorn ; pkill -f vite
-      e inicie novamente.
+   -> A porta ja esta em uso. Identifique o processo antes de encerra-lo:
+      $ sudo systemctl status ccdvi.service --no-pager
+      $ sudo ss -ltnp | grep -E ':(5173|8000)\b'
+      Evite pkill generico; nao execute dev-up.sh se o servico ja roda.
+      Para reiniciar o servico: sudo systemctl restart ccdvi.service.
 
  "Permission denied" ao executar scripts/dev-up.sh
    -> $ chmod +x scripts/*.sh
+      Depois use sudo systemctl restart ccdvi.service.
 
  Erros de sintaxe do Vite/npm ou "Unsupported engine"
    -> Node.js antigo. Confira  $ node --version  (precisa ser v22.x).
-      Refaca o passo 2 e depois:  $ rm -rf frontend/node_modules
+      Pare o servico antes de reinstalar as dependencias:
+      $ sudo systemctl stop ccdvi.service
+      $ rm -rf frontend/node_modules
+      $ sudo systemctl start ccdvi.service
 
  Erro ao instalar dependencias Python ("ensurepip" / "venv")
    -> $ sudo apt install -y python3.12-venv
-      $ rm -rf backend/.venv   e execute scripts/dev-up.sh novamente.
+      Pare o servico antes de recriar o ambiente Python:
+      $ sudo systemctl stop ccdvi.service
+      $ rm -rf backend/.venv
+      $ sudo systemctl start ccdvi.service
 
  Outro computador nao abre a pagina
    -> Use o IP correto (hostname -I), confirme a mesma rede Wi-Fi/LAN e
@@ -293,20 +403,23 @@
       criadas.
 
  "Muitas tentativas. Aguarde alguns minutos."
-   -> Bloqueio de seguranca apos 5 senhas erradas. Aguarde 15 minutos ou
-      reinicie a aplicacao.
+   -> Bloqueio de seguranca apos 5 senhas erradas. Aguarde 15 minutos.
+      Nao reinicie o sistema para contornar controles de autenticacao.
 
 
 -------------------------------------------------------------------------------
- 11. OBSERVACOES IMPORTANTES
+ 12. OBSERVACOES IMPORTANTES
 -------------------------------------------------------------------------------
 
- - Este modo (nativo, com scripts/dev-up.sh) e o validado para demonstracao
-   e laboratorio. A implantacao com Podman/Quadlet (pasta deploy/) esta
+ - Este modo (nativo, com scripts/dev-up.sh gerenciado por ccdvi.service)
+   e destinado a demonstracao e laboratorio. A implantacao com Podman/Quadlet (pasta deploy/) esta
    documentada em docs/INSTALACAO.md, mas AINDA NAO FOI VALIDADA em servidor.
  - Use somente dados ficticios. O sistema nao e homologado pela INTERPOL e
    nao realiza identificacao de vitimas.
  - Nao versione nem compartilhe o arquivo backend/.env (contem senhas).
+ - O CCDVI Drive e outra aplicacao, com seus proprios servicos Quadlet:
+   drive-db, drive-redis, drive-app e drive-cron. Consulte o runbook
+   Runbook_Instalacao_Ubuntu_CCDVI_Drive.txt do repositorio correspondente.
 
 ===============================================================================
  FIM DO RUNBOOK
