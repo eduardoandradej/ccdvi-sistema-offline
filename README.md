@@ -17,6 +17,7 @@ Ante Mortem (AM) e Post Mortem (PM).
 [Telas](#telas) ·
 [Arquitetura do software](#arquitetura-do-software) ·
 [Situação atual](#situação-atual) ·
+[Preparar VM KVM](#preparação-da-vm-no-rocky-linux--kvm) ·
 [Como executar](#como-executar) ·
 [Testes](#testes) ·
 [Documentação](#documentação)
@@ -124,6 +125,7 @@ flowchart LR
 backend/            API FastAPI (app/), migrações (alembic/), testes (tests/)
 frontend/           Interface React/TS (src/), testes E2E Playwright (e2e/)
 deploy/             Containerfiles, Nginx, unidades Quadlet, exemplo de configuração
+infra/kvm/          Autoinstall Ubuntu 24.04 LTS no KVM/Rocky Linux e runbook da VM
 scripts/            dev-up, podman-deploy, backup/restore, verificação de recursos externos
 tests/amostras/     Arquivos sintéticos (marca d'água "TESTE — DADO FICTÍCIO") para upload manual
 docs/               Especificação, arquitetura, rastreabilidade, RBAC, instalação, status, imagens
@@ -141,32 +143,56 @@ Versão **0.1.0**, primeiro MVP. Detalhamento completo em
 | ⏳ **Pendente** | Implantação Podman/Quadlet validada em servidor real, teste com a internet fisicamente desligada, exportação PDF/CSV, cadastro de operações pela interface |
 | 🗺️ **Planejado** | Sincronização entre as três bases por pacotes cifrados; integração com sistemas oficiais (SPT Web) |
 
+## Preparação da VM no Rocky Linux / KVM
+
+Antes de instalar a aplicação, é possível provisionar um Ubuntu Server 24.04 LTS em KVM/QEMU sobre Rocky Linux,
+por meio de **Autoinstall + NoCloud**, sem interação com as telas do instalador.
+
+| Item do laboratório | Configuração |
+|---|---|
+| Hipervisor | Rocky Linux, QEMU/KVM e libvirt |
+| VM | `ccdvi-ubuntu-lab` |
+| Sistema convidado | Ubuntu Server 24.04.5 LTS |
+| Recursos | 4 vCPUs, 16 GiB de RAM, disco de 80 GiB em qcow2 |
+| Armazenamento | Pool `default`, em SSD (`/var/lib/libvirt/images`) |
+| Rede | Bridge `br-ex`, conectada à LAN; IP inicialmente via DHCP |
+| Acesso | Usuário administrativo `suporte` e OpenSSH |
+
+- **[Runbook de criação da VM Ubuntu no KVM](infra/kvm/Runbook_Criacao_VM_Ubuntu_KVM_RockyLinux.md)** — preparação, execução, verificações e recuperação.
+- **[Script de instalação automatizada](infra/kvm/instalar-ubuntu-ccdvi-kvm.sh)** — deve ser executado **no Rocky Linux hospedeiro**, com `sudo` disponível, e apenas ao criar uma VM nova.
+
+O script solicita uma senha inicial no terminal e automatiza o restante do instalador. A VM criada não deve ser
+reprovisionada por cima de outra já existente. O ambiente DVI permanece **demonstrativo**, com dados fictícios.
+Não coloque senhas, discos `.qcow2`, imagens ISO NoCloud ou arquivos de configuração com credenciais no Git.
+
+**Sequência de leitura:** runbook KVM → runbook Sistema DVI → runbook CCDVI Drive.
+O Drive tem [repositório próprio](https://github.com/eduardoandradej/ccdvi-drive-offline).
+
 ## Como executar
 
-Guia completo, com implantação em Podman e instalação sem internet: [docs/INSTALACAO.md](docs/INSTALACAO.md).
+Para instalação **nativa no Ubuntu 24.04 LTS** e operação via `systemd`, siga o
+**[Runbook de Instalação e Operação do Sistema DVI](Runbook_Instalacao_Ubuntu_CCDVI_Sistema.txt)**.
+A configuração ilustrada abaixo é apenas uma visão resumida; o runbook contém as etapas completas.
 
-### Instalação prática no Ubuntu Server 24.04 LTS
-
-Para instalação nativa do Sistema DVI Offline, consulte o
-[Runbook de Instalação e Operação do Sistema DVI](Runbook_Instalacao_Ubuntu_CCDVI_Sistema.txt).
-
-O runbook inclui preparação do ambiente, PostgreSQL, aplicação web,
-configuração do systemd e comandos de gerenciamento do serviço.
-
+Guia da implantação alternativa com Podman/Quadlet e procedimentos offline:
+[docs/INSTALACAO.md](docs/INSTALACAO.md).
 
 ```bash
-# 1. Dependências (Ubuntu 24.04)
-sudo apt install -y postgresql-16 python3.12-venv nodejs npm   # Node 22 recomendado
+# No Ubuntu já instalado: acessar o repositório
+cd ~/ccdvi-sistema-offline
 
-# 2. Banco (troque a senha)
-sudo -u postgres psql -c "CREATE ROLE dvi LOGIN PASSWORD 'TROQUE_ESTA_SENHA';"
-sudo -u postgres psql -c "CREATE DATABASE dvi OWNER dvi;"
+# Para a primeira instalação, seguir o runbook Sistema DVI antes de iniciar serviços.
+# Após configurar o serviço ccdvi.service conforme o runbook:
+sudo systemctl start ccdvi.service
+sudo systemctl status ccdvi.service --no-pager
 
-# 3. Configuração
-cp .env.example backend/.env          # ajuste DVI_DATABASE_URL e DVI_SEED_PASSWORD
+# Operação diária:
+sudo systemctl stop ccdvi.service
+sudo systemctl restart ccdvi.service
+sudo journalctl -u ccdvi.service -f   # Ctrl+C fecha os logs, NÃO encerra o serviço
 
-# 4. Instala, migra, cria dados fictícios e inicia API + interface
-scripts/dev-up.sh
+# Verificação da aplicação:
+curl -fsS http://127.0.0.1:5173/api/health
 ```
 
 | Endereço | Uso |
@@ -222,6 +248,9 @@ DVI_E2E_PASSWORD=<senha do seed> npx playwright test
 | [RASTREABILIDADE.md](docs/RASTREABILIDADE.md) | Cada campo/tela relacionado ao formulário ou anexo de origem |
 | [RBAC.md](docs/RBAC.md) | Matriz de permissões e lista dos endpoints |
 | [ESQUEMA_BANCO.md](docs/ESQUEMA_BANCO.md) | Tabelas, colunas, restrições e migrações |
+| [Runbook KVM](infra/kvm/Runbook_Criacao_VM_Ubuntu_KVM_RockyLinux.md) | Provisionamento automático de VM Ubuntu no KVM/Rocky Linux |
+| [Script KVM](infra/kvm/instalar-ubuntu-ccdvi-kvm.sh) | Criação de VM com Autoinstall/NoCloud |
+| [Runbook Sistema DVI](Runbook_Instalacao_Ubuntu_CCDVI_Sistema.txt) | Instalação nativa e administração do `ccdvi.service` |
 | [INSTALACAO.md](docs/INSTALACAO.md) | Instalação, Podman/Quadlet, backup/restore e operação sem internet |
 | [STATUS_IMPLEMENTACAO.md](docs/STATUS_IMPLEMENTACAO.md) | Implementado, testado, pendente e bloqueado |
 | [LICENSES.md](LICENSES.md) | Licenças das dependências |
